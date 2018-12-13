@@ -1,13 +1,13 @@
-package classschedules
+package uapi
 
-//UAPIClassResponse  is the body we unmarshal the UAPI response into.
-type UAPIClassResponse struct {
-	Metadata UAPIMetadata        `json:"metadata"`
-	Values   []UAPIClassSchedule `json:"values"`
+//ClassResponse  is the body we unmarshal the  response into.
+type ClassResponse struct {
+	Metadata Metadata        `json:"metadata"`
+	Values   []ClassSchedule `json:"values"`
 }
 
-//UAPIMetadata .
-type UAPIMetadata struct {
+//Metadata .
+type Metadata struct {
 	CollectionSize     int           `json:"collection_size"`
 	PageStart          int           `json:"page_start"`
 	PageEnd            int           `json:"page_end"`
@@ -28,12 +28,12 @@ type UAPIMetadata struct {
 	DefaultDb []string `json:"default_db"`
 }
 
-//UAPIClassSchedule .
-type UAPIClassSchedule struct {
-	AssignedInstructors UAPIAssignedInstructors `json:"assigned_instructors"`
-	AssignedSchedules   UAPIAssignedSchedule    `json:"assigned_schedules"`
-	EnrollmentCounts    UAPIEnrollmentCounts    `json:"enrollment_counts"`
-	Basic               UAPIClassScheduleBasic  `json:"basic"`
+//ClassSchedule .
+type ClassSchedule struct {
+	AssignedInstructors AssignedInstructors `json:"assigned_instructors"`
+	AssignedSchedules   AssignedSchedule    `json:"assigned_schedules"`
+	EnrollmentCounts    EnrollmentCounts    `json:"enrollment_counts"`
+	Basic               ClassScheduleBasic  `json:"basic"`
 
 	Headers struct {
 		Links struct {
@@ -45,8 +45,8 @@ type UAPIClassSchedule struct {
 	} `json:"headers"`
 }
 
-// UAPIClassScheduleBasic .
-type UAPIClassScheduleBasic struct {
+// ClassScheduleBasic .
+type ClassScheduleBasic struct {
 	YearTerm struct {
 		Value   string `json:"value"`
 		APIType string `json:"api_type"`
@@ -148,13 +148,13 @@ type UAPIClassScheduleBasic struct {
 		APIType string `json:"api_type"`
 	} `json:"fixed_or_variable_course"`
 	CreditHours struct {
-		Value   int    `json:"value"`
-		APIType string `json:"api_type"`
+		Value   float64 `json:"value"`
+		APIType string  `json:"api_type"`
 	} `json:"credit_hours"`
 	MinimumCreditHours struct {
-		Value           int    `json:"value"`
-		APIType         string `json:"api_type"`
-		RelatedResource string `json:"related_resource"`
+		Value           float64 `json:"value"`
+		APIType         string  `json:"api_type"`
+		RelatedResource string  `json:"related_resource"`
 	} `json:"minimum_credit_hours"`
 	LectureHours struct {
 		Value   string `json:"value"`
@@ -259,8 +259,8 @@ type UAPIClassScheduleBasic struct {
 	} `json:"course_note"`
 }
 
-// UAPIEnrollmentCounts  .
-type UAPIEnrollmentCounts struct {
+// EnrollmentCounts  .
+type EnrollmentCounts struct {
 	Links struct {
 		GetEnrollmentCounts struct {
 			Rel    string `json:"rel"`
@@ -328,8 +328,8 @@ type UAPIEnrollmentCounts struct {
 	} `json:"waitlist_count"`
 }
 
-// UAPIAssignedInstructors .
-type UAPIAssignedInstructors struct {
+// AssignedInstructors .
+type AssignedInstructors struct {
 	Metadata struct {
 		AdvisoryMessages []interface{} `json:"advisory_messages"`
 		CollectionSize   int           `json:"collection_size"`
@@ -414,8 +414,15 @@ type UAPIAssignedInstructors struct {
 	} `json:"values"`
 }
 
-// UAPIAssignedSchedule .
-type UAPIAssignedSchedule struct {
+//Value .
+type Value struct {
+	Value   string `json:"value"`
+	APIType string `json:"api_type"`
+	Key     bool   `json:"key"`
+}
+
+// AssignedSchedule .
+type AssignedSchedule struct {
 	Metadata struct {
 		CollectionSize  int `json:"collection_size"`
 		PageStart       int `json:"page_start"`
@@ -426,9 +433,6 @@ type UAPIAssignedSchedule struct {
 	} `json:"metadata"`
 	Values []struct {
 		ScheduleType struct {
-			Value   string `json:"value"`
-			APIType string `json:"api_type"`
-			Key     bool   `json:"key"`
 		} `json:"schedule_type"`
 		ScheduleID struct {
 			Value   string `json:"value"`

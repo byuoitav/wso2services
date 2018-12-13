@@ -9,14 +9,17 @@ import (
 	"os"
 	"time"
 
+	"github.com/byuoitav/common/log"
 	"github.com/byuoitav/common/nerr"
 )
 
 //MakeWSO2Request makes a generic WSO2 request
 //toReturn should be a pointer
 func MakeWSO2Request(method, url string, body interface{}, toReturn interface{}) *nerr.E {
+
+	log.L.Debugf("Making %v request against %v", method, url)
 	//attach key
-	key := os.Getenv("WSO2TOKEN")
+	key := os.Getenv("WSO2_TOKEN")
 	if len(key) == 0 {
 		return nerr.Create("No WSO2 token defined", "no-creds")
 	}
@@ -56,12 +59,12 @@ func MakeWSO2Request(method, url string, body interface{}, toReturn interface{})
 	}
 
 	if resp.StatusCode/100 != 2 {
-		return nerr.Translate(err).Addf("Non 200: body %s", rb)
+		return nerr.Create(fmt.Sprintf("Non 200: body %s", rb), "request-error")
 	}
 
 	err = json.Unmarshal(rb, toReturn)
 	if err != nil {
-		return nerr.Translate(err).Addf("Couldn't unmarshal response %s", rb)
+		return nerr.Translate(err).Addf("Couldn't unmarshal response %s", "unmarshal error")
 	}
 
 	return nil
