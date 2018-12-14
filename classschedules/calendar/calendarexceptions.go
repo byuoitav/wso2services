@@ -14,10 +14,14 @@ import (
 )
 
 const (
-	mondayinstruction = "monday-instruction"
-	fridayinstruction = "friday-instruction"
-	holiday           = "holiday"
-	noclass           = "noclass"
+	//Mondayinstruction .
+	Mondayinstruction = "monday-instruction"
+	//Fridayinstruction .
+	Fridayinstruction = "friday-instruction"
+	//Holiday .
+	Holiday = "holiday"
+	//Noclass .
+	Noclass = "noclass"
 )
 
 //Exception .
@@ -85,10 +89,10 @@ func CheckExceptionsForDate(date time.Time) ([]Exception, *nerr.E) {
 }
 
 var codes = map[int]string{
-	420: noclass,
-	419: mondayinstruction,
-	417: fridayinstruction,
-	402: holiday,
+	420: Noclass,
+	419: Mondayinstruction,
+	417: Fridayinstruction,
+	402: Holiday,
 }
 
 var timeformat = "2006-01-02"
