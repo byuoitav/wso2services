@@ -47,8 +47,8 @@ type ClassSchedule struct {
 	StartDate      interface{} `json:"start_date"`
 	EndDate        interface{} `json:"end_date"`
 
-	startTime time.Time //the zero time with the hours/minutes of start of class set
-	endTime   time.Time //the zero time with the hours/minutes of end of class set
+	StartTime time.Time //the zero time with the hours/minutes of start of class set
+	EndTime   time.Time //the zero time with the hours/minutes of end of class set
 }
 
 //Room .
@@ -90,6 +90,109 @@ func GetClassScheduleForTime(roomname string, classtime time.Time) (ClassSchedul
 		return ClassSchedule{}, err.Addf("Couldn't get class schedule for room %v and time %v", roomname, classtime)
 	}
 
+	rm, err := getRoomInfoForYearTerm(roomname, t)
+
+	//figure out what class classtime falls into
+	//check to see if there are any exceptions for that date
+	exceptions, err := calendar.CheckExceptionsForDate(classtime)
+	if err != nil {
+		return ClassSchedule{}, err.Addf("Couldn't get class schedule for time.")
+	}
+
+	if len(exceptions) > 0 {
+		//we have some exeptions, check to see what kind?
+		return FindScheduleWithExceptions(exceptions[0], rm, classtime)
+	}
+	return FindSchedule(rm, classtime, classtime.Weekday())
+}
+
+//GetClassScheduleForTimeBlock .
+func GetClassScheduleForTimeBlock(roomname string, start, end time.Time) ([]ClassSchedule, *nerr.E) {
+	loc, er := time.LoadLocation("America/Denver")
+	if er != nil {
+		log.L.Errorf("Couldn't load timezone")
+		return []ClassSchedule{}, nerr.Translate(er)
+	}
+
+	t, err := calendar.GetYearTermForDate(start)
+	if err != nil {
+		return []ClassSchedule{}, err.Addf("Couldn't get class schedule for room %v and time %v", roomname, start)
+	}
+
+	rm, err := getRoomInfoForYearTerm(roomname, t)
+
+	if time.Time(t.EndDate).Before(end) {
+		//TODO: we're gonna need to make multiple calls.
+		log.L.Errorf("Term spanning block %v - %v", start, end)
+		return []ClassSchedule{}, nerr.Create(fmt.Sprintf("Term spanning block %v - %v", start, end), "block-too-large")
+	}
+
+	//start at start
+	curStart := start.In(loc)
+	curEnd := endOfDay(curStart)
+
+	toReturn := []ClassSchedule{}
+
+	for curStart.Before(end) && !curStart.Equal(end) {
+		log.L.Debugf("Checking schedules for block %v - %v", curStart.In(time.Local), curEnd.In(time.Local))
+
+		if curEnd.After(end) {
+			log.L.Debugf("Cur end %v is after block end, checking block %v - %v", curEnd.In(time.Local), curStart.In(time.Local), end)
+			curEnd = end
+		}
+
+		exceptions, err := calendar.CheckExceptionsForDate(curStart)
+		if err != nil {
+			return []ClassSchedule{}, err.Addf("Couldn't get class schedule for time.")
+		}
+
+		if len(exceptions) > 0 {
+			switch exceptions[0].Category {
+			case calendar.Mondayinstruction:
+				tmp, err := findSchedulesInBlock(rm, curStart, curEnd, time.Monday)
+				if err != nil {
+					return toReturn, err.Addf("Couldn't get classes for period %v = %v", curStart, curEnd)
+				}
+				toReturn = append(toReturn, tmp...)
+			case calendar.Fridayinstruction:
+				tmp, err := findSchedulesInBlock(rm, curStart, curEnd, time.Friday)
+				if err != nil {
+					return toReturn, err.Addf("Couldn't get classes for period %v = %v", curStart, curEnd)
+				}
+				toReturn = append(toReturn, tmp...)
+			default: //holiday or no class
+				return []ClassSchedule{}, nil
+			}
+		} else {
+			//no exceptions
+			tmp, err := findSchedulesInBlock(rm, curStart, curEnd, curStart.Weekday())
+			if err != nil {
+				return toReturn, err.Addf("Couldn't get classes for period %v = %v", curStart, curEnd)
+			}
+
+			toReturn = append(toReturn, tmp...)
+		}
+
+		curStart = startOfDay(curStart.AddDate(0, 0, 1))
+		curEnd = endOfDay(curStart)
+
+	}
+
+	return toReturn, nil
+}
+
+func startOfDay(t time.Time) time.Time {
+	y, m, d := t.Date()
+	return time.Date(y, m, d, 0, 0, 0, 0, t.Location())
+}
+
+func endOfDay(t time.Time) time.Time {
+	y, m, d := t.Date()
+	return time.Date(y, m, d, 23, 59, 59, int(time.Second-time.Nanosecond), t.Location())
+}
+
+func getRoomInfoForYearTerm(roomname string, t calendar.YearTermDate) (Room, *nerr.E) {
+
 	//check to see if we have it in the cache
 	term, ok := cache[t.YearTerm]
 	if !ok {
@@ -97,7 +200,7 @@ func GetClassScheduleForTime(roomname string, classtime time.Time) (ClassSchedul
 		rm, err := fetchClassSchedule(roomname, t.YearTerm)
 		if err != nil {
 			updateTimes[roomname] = time.Now()
-			return ClassSchedule{}, err.Addf("Couldn't get class schedule for time.")
+			return Room{}, err.Addf("Couldn't get class schedule for time.")
 		}
 		//we need to fetch the whole thing
 		term = map[string]Room{
@@ -118,7 +221,7 @@ func GetClassScheduleForTime(roomname string, classtime time.Time) (ClassSchedul
 			updateTimes[roomname] = time.Now()
 			rm, err := fetchClassSchedule(roomname, t.YearTerm)
 			if err != nil {
-				return ClassSchedule{}, err.Addf("Couldn't get class schedule for time.")
+				return Room{}, err.Addf("Couldn't get class schedule for time.")
 			}
 			term[roomname] = rm
 		}
@@ -128,29 +231,16 @@ func GetClassScheduleForTime(roomname string, classtime time.Time) (ClassSchedul
 		if !ok || time.Now().Sub(ck) > 5*time.Minute {
 
 			//we go get it .
-			rm, err = fetchClassSchedule(roomname, t.YearTerm)
+			rm, err := fetchClassSchedule(roomname, t.YearTerm)
 			updateTimes[roomname] = time.Now()
 			if err != nil {
-				return ClassSchedule{}, err.Addf("Couldn't get class schedule for time.")
+				return Room{}, err.Addf("Couldn't get class schedule for time.")
 			}
 			term[roomname] = rm
 		}
 	}
 
-	//rm will be set here.
-
-	//figure out what class classtime falls into
-	//check to see if there are any exceptions for that date
-	exceptions, err := calendar.CheckExceptionsForDate(classtime)
-	if err != nil {
-		return ClassSchedule{}, err.Addf("Couldn't get class schedule for time.")
-	}
-
-	if len(exceptions) > 0 {
-		//we have some exeptions, check to see what kind?
-		return FindScheduleWithExceptions(exceptions[0], rm, classtime)
-	}
-	return FindSchedule(rm, classtime, classtime.Weekday())
+	return rm, nil
 }
 
 //FindScheduleWithExceptions .
@@ -167,10 +257,10 @@ func FindScheduleWithExceptions(exception calendar.Exception, rm Room, t time.Ti
 
 }
 
-//FindSchedule .
-func FindSchedule(rm Room, t time.Time, weekday time.Weekday) (ClassSchedule, *nerr.E) {
-	log.L.Debugf("Finding schedule for %v at %v. it's a %v", rm.Building+rm.Room, t, weekday)
-	log.L.Debugf("%v has %v classes", rm.Building+rm.Room, len(rm.Schedules))
+//Assumes the block starts and ends in the same day. If the block needs to span days, make separate calls for each day.
+func findSchedulesInBlock(rm Room, start, end time.Time, weekday time.Weekday) ([]ClassSchedule, *nerr.E) {
+	toReturn := []ClassSchedule{}
+	log.L.Debugf("Finding Schedules in block %v - %v. It's a %v", start.In(time.Local), end.In(time.Local), weekday)
 
 	for _, v := range rm.Schedules {
 		wkdays := FindDaysOfWeek(v.Days)
@@ -185,22 +275,81 @@ func FindSchedule(rm Room, t time.Time, weekday time.Weekday) (ClassSchedule, *n
 		if !ok {
 			continue
 		}
-		log.L.Debugf("Class %v occurs on %v", v.DeptName+v.CatalogNumber, weekday)
 
+		//check to see if windows overlap at all...
 		//we're on the right day of the week, check to see if we're in the right time
-		dayclassStart := time.Date(t.Year(), t.Month(), t.Day(), v.startTime.Hour(), v.startTime.Minute(), 0, 0, time.UTC)
+		dayclassStart := time.Date(start.Year(), start.Month(), start.Day(), v.StartTime.Hour(), v.StartTime.Minute(), 0, 0, v.StartTime.Location())
 		dayclassStart = dayclassStart.Add(-5 * time.Minute) //for a buffer
 
-		log.L.Debugf("Class %v started at %v ", v.DeptName+v.CatalogNumber, dayclassStart)
+		//we're on the right day of the week, check to see if we're in the right time
+		dayclassEnd := time.Date(end.Year(), end.Month(), end.Day(), v.EndTime.Hour(), v.EndTime.Minute(), 0, 0, v.EndTime.Location())
+		dayclassEnd = dayclassEnd.Add(5 * time.Minute) //for a buffer
+
+		//check to see if start time is before block start or if class end is after start time
+		if dayclassStart.Before(end) && dayclassEnd.After(start) {
+
+			//so we can do comparisons later...
+			v.EndTime = dayclassEnd
+			v.StartTime = dayclassStart
+
+			if len(toReturn) == 0 {
+
+				//bingo.
+				toReturn = append(toReturn, v)
+			} else {
+
+				toCompare := toReturn[len(toReturn)-1]
+				//check to see if this section happens at the same time as another class of the same name. If yes, we just add the enrollment/size numbers.
+				if toCompare.DeptName == v.DeptName && toCompare.CatalogNumber == v.CatalogNumber && toCompare.StartTime.Equal(v.StartTime) && toCompare.EndTime.Equal(v.EndTime) {
+					toCompare.SectionSize = v.SectionSize + toCompare.SectionSize
+					toCompare.TotalEnr = v.TotalEnr + toCompare.TotalEnr
+					toReturn[len(toReturn)-1] = toCompare
+
+				} else {
+					//bingo.
+					toReturn = append(toReturn, v)
+				}
+			}
+		}
+	}
+
+	return toReturn, nil
+}
+
+//FindSchedule .
+func FindSchedule(rm Room, t time.Time, weekday time.Weekday) (ClassSchedule, *nerr.E) {
+	log.L.Debugf("Finding schedule for %v at %v. it's a %v", rm.Building+rm.Room, t, weekday)
+	//log.L.Debugf("%v has %v classes", rm.Building+rm.Room, len(rm.Schedules))
+
+	for _, v := range rm.Schedules {
+		wkdays := FindDaysOfWeek(v.Days)
+
+		var ok bool
+		for i := range wkdays {
+			if wkdays[i] == weekday {
+				ok = true
+				break
+			}
+		}
+		if !ok {
+			continue
+		}
+		//		log.L.Debugf("Class %v occurs on %v", v.DeptName+v.CatalogNumber, weekday)
+
+		//we're on the right day of the week, check to see if we're in the right time
+		dayclassStart := time.Date(t.Year(), t.Month(), t.Day(), v.StartTime.Hour(), v.StartTime.Minute(), 0, 0, time.UTC)
+		dayclassStart = dayclassStart.Add(-5 * time.Minute) //for a buffer
+
+		//		log.L.Debugf("Class %v started at %v ", v.DeptName+v.CatalogNumber, dayclassStart)
 
 		if t.Before(dayclassStart) {
 			continue
 		}
 		//we're on the right day of the week, check to see if we're in the right time
-		dayclassEnd := time.Date(t.Year(), t.Month(), t.Day(), v.endTime.Hour(), v.endTime.Minute(), 0, 0, time.UTC)
+		dayclassEnd := time.Date(t.Year(), t.Month(), t.Day(), v.EndTime.Hour(), v.EndTime.Minute(), 0, 0, time.UTC)
 		dayclassEnd = dayclassEnd.Add(5 * time.Minute) //for a buffer
 
-		log.L.Debugf("Class %v ended at %v ", v.DeptName+v.CatalogNumber, dayclassEnd)
+		//		log.L.Debugf("Class %v ended at %v ", v.DeptName+v.CatalogNumber, dayclassEnd)
 
 		if t.After(dayclassEnd) {
 			continue
@@ -250,6 +399,11 @@ func FindDaysOfWeek(wkstr string) []time.Weekday {
 const datere = `(\d{1,2}):(\d{2})([ap]) - (\d{1,2}):(\d{2})([ap])`
 
 func fetchClassSchedule(roomname, term string) (Room, *nerr.E) {
+	defaultOffset, er := time.LoadLocation("MST")
+	if er != nil {
+		log.L.Errorf("Couldn't load MST timezone")
+		return Room{}, nerr.Translate(er)
+	}
 
 	//we figure out the building
 	br := strings.Split(roomname, "-")
@@ -262,7 +416,7 @@ func fetchClassSchedule(roomname, term string) (Room, *nerr.E) {
 		return resp.ClassRoomService.Room, err.Addf("Couldn't fetch class scheudle")
 	}
 
-	//for each time, we'll need to go and parse the slasstime to figure out the deal
+	//for each time, we'll need to go and parse the classtime to figure out the deal
 	rm := resp.ClassRoomService.Room
 
 	for i := range rm.Schedules {
@@ -283,11 +437,11 @@ func fetchClassSchedule(roomname, term string) (Room, *nerr.E) {
 			msg := fmt.Sprintf("Unknown class format %v", rm.Schedules[i].ClassTime)
 			return rm, nerr.Create(msg, "unknown-format")
 		}
-
-		rm.Schedules[i].startTime = time.Time{}.Add(time.Duration(shr)*time.Hour + time.Duration(smin)*time.Minute)
 		if matches[0][3] == "p" {
-			rm.Schedules[i].startTime = rm.Schedules[i].startTime.Add(12 * time.Hour)
+			shr = shr + 12
 		}
+
+		rm.Schedules[i].StartTime = time.Date(0, 0, 0, shr, smin, 0, 0, defaultOffset)
 
 		ehr, err := strconv.Atoi(matches[0][4])
 		if err != nil {
@@ -301,10 +455,13 @@ func fetchClassSchedule(roomname, term string) (Room, *nerr.E) {
 			return rm, nerr.Create(msg, "unknown-format")
 		}
 
-		rm.Schedules[i].endTime = time.Time{}.Add(time.Duration(ehr)*time.Hour + time.Duration(emin)*time.Minute)
 		if matches[0][6] == "p" {
-			rm.Schedules[i].endTime = rm.Schedules[i].endTime.Add(12 * time.Hour)
+			ehr = ehr + 12
 		}
+
+		rm.Schedules[i].EndTime = time.Date(0, 0, 0, ehr, emin, 0, 0, defaultOffset)
+
+		log.L.Debugf("%v-%v start %v, end %v,", rm.Schedules[i].DeptName, rm.Schedules[i].CatalogNumber, rm.Schedules[i].StartTime, rm.Schedules[i].EndTime)
 	}
 
 	return resp.ClassRoomService.Room, nil

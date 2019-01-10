@@ -120,6 +120,7 @@ func GetYearTermForDate(date time.Time) (YearTermDate, *nerr.E) {
 		v, err := getControlDates()
 		if err != nil {
 			log.L.Errorf(err.Error())
+			classSchedulecheckMutex.Unlock()
 			return YearTermDate{}, err.Addf("Control dates are out of date, but can't update")
 		}
 

@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
-	"os"
 	"time"
 
 	"github.com/byuoitav/common/log"
@@ -18,11 +17,13 @@ import (
 func MakeWSO2Request(method, url string, body interface{}, toReturn interface{}) *nerr.E {
 
 	log.L.Debugf("Making %v request against %v", method, url)
-	//attach key
-	key := os.Getenv("WSO2_TOKEN")
-	if len(key) == 0 {
-		return nerr.Create("No WSO2 token defined", "no-creds")
+
+	key, er := GetAccessKey()
+	if er != nil {
+		return er.Addf("Couldn't make WSO2 request")
 	}
+
+	//attach key
 	var b []byte
 	var ok bool
 	var err error
@@ -59,7 +60,7 @@ func MakeWSO2Request(method, url string, body interface{}, toReturn interface{})
 	}
 
 	if resp.StatusCode/100 != 2 {
-		return nerr.Create(fmt.Sprintf("Non 200: body %s", rb), "request-error")
+		return nerr.Create(fmt.Sprintf("Non 200: body %s Response code: %v", rb, resp.StatusCode), "request-error")
 	}
 
 	err = json.Unmarshal(rb, toReturn)

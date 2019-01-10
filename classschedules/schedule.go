@@ -1,5 +1,0 @@
-package classschedules
-
-func main() {
-
-}
