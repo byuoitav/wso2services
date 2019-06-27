@@ -29,13 +29,16 @@ var (
 type accessKeyResp struct {
 	Scope       string `json:"scope"`
 	TokenType   string `json:"token_type"`
-	Expires     int    `json:"exires_in"`
+	Expires     int    `json:"expires_in"`
 	Refresh     string `json:"refresh_token"`
 	AccessToken string `json:"access_token"`
 }
 
 //GetAccessKey .
 func GetAccessKey() (string, *nerr.E) {
+
+	secretMu.Lock()
+	defer secretMu.Unlock()
 
 	//check to see if we have a key and if the curTTL is after now
 	if curTTL.After(time.Now()) {
@@ -63,19 +66,21 @@ func getAccessKey() (string, *nerr.E) {
 		Timeout: 5 * time.Second,
 	}
 
+	log.L.Debugf("Getting access key token from %s", req.URL.String())
+
 	resp, err := c.Do(req)
 	if err != nil {
-		return "", nerr.Translate(err).Addf("couldn't get access key")
+		return "", nerr.Translate(err).Addf("error executing access key request")
 	}
 
 	//read the body
 	b, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		return "", nerr.Translate(err).Addf("couldn't get the access key")
+		return "", nerr.Translate(err).Addf("couldn't read the access key body")
 	}
 
 	if resp.StatusCode/100 != 2 {
-		return "", nerr.Create(fmt.Sprintf("Couldn't get the access key. Non 200: body %s", b), "request-error")
+		return "", nerr.Create(fmt.Sprintf("Couldn't get the access key. Non 200: body [%s]", b), "request-error")
 	}
 
 	var acr accessKeyResp
@@ -83,6 +88,8 @@ func getAccessKey() (string, *nerr.E) {
 	if err != nil {
 		return "", nerr.Translate(err).Addf("couldn't get the access key. Couldn't unmarshal response %s", "unmarshal error")
 	}
+
+	log.L.Debugf("access key response: %v", acr)
 
 	//we set the ttl
 	curTTL = time.Now().Add(time.Duration(acr.Expires)*time.Second - 20)

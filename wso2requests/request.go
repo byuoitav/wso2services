@@ -15,8 +15,13 @@ import (
 //MakeWSO2Request makes a generic WSO2 request
 //toReturn should be a pointer
 func MakeWSO2Request(method, url string, body interface{}, toReturn interface{}) *nerr.E {
+	return MakeWSO2RequestWithHeaders(method, url, body, toReturn, nil)
+}
 
-	log.L.Debugf("Making %v request against %v", method, url)
+//MakeWSO2RequestWithHeaders makes a generic WSO2 request with headers
+//toReturn should be a pointer
+func MakeWSO2RequestWithHeaders(method, url string, body interface{}, toReturn interface{}, headers map[string]string) *nerr.E {
+	//	log.L.Debugf("Making %v request against %v at %v", method, url, time.Now())
 
 	key, er := GetAccessKey()
 	if er != nil {
@@ -37,36 +42,55 @@ func MakeWSO2Request(method, url string, body interface{}, toReturn interface{})
 		}
 	}
 
-	req, err := http.NewRequest(method, url, bytes.NewBuffer(b))
-	if err != nil {
-		return nerr.Translate(err).Addf("Couldn't build WSO2 request")
+	for {
+		hasRetried := false
+
+		req, err := http.NewRequest(method, url, bytes.NewBuffer(b))
+		if err != nil {
+			return nerr.Translate(err).Addf("Couldn't build WSO2 request")
+		}
+
+		req.Header.Set("Authorization", fmt.Sprintf("Bearer %v", key))
+
+		for k, v := range headers {
+			log.L.Debugf("Setting header %v to %v", k, v)
+			req.Header.Set(k, v)
+		}
+
+		c := http.Client{
+			Timeout: 20 * time.Second, //I wish we could make this shorter... but alas.
+		}
+
+		resp, err := c.Do(req)
+		if err != nil {
+			return nerr.Translate(err).Addf("Couldn't make WSO2 request")
+		}
+		defer resp.Body.Close()
+
+		rb, err := ioutil.ReadAll(resp.Body)
+		if err != nil {
+			return nerr.Translate(err).Addf("Couldn't read response body")
+		}
+
+		//log.L.Debugf("Response body: %s", rb)
+
+		//log.L.Debugf("Response Headers: %v", resp.Header)
+
+		if resp.StatusCode/100 != 2 {
+			if resp.StatusCode == 400 && len(rb) == 0 && !hasRetried {
+				//if we get a 400 and a blank body and we haven't retried, then just try again
+				log.L.Debugf("400 and blank body - retrying WS02 request")
+				hasRetried = true
+				continue
+			}
+			return nerr.Create(fmt.Sprintf("Non 200: body [%s] Response code: [%v]", rb, resp.StatusCode), "request-error")
+		}
+
+		err = json.Unmarshal(rb, toReturn)
+		if err != nil {
+			return nerr.Translate(err).Addf("Couldn't unmarshal response %s", "unmarshal error")
+		}
+
+		return nil
 	}
-
-	req.Header.Set("Authorization", fmt.Sprintf("Bearer %v", key))
-
-	c := http.Client{
-		Timeout: 20 * time.Second, //I wish we could make this shorter... but alas.
-	}
-
-	resp, err := c.Do(req)
-	if err != nil {
-		return nerr.Translate(err).Addf("Couldn't make WSO2 request")
-	}
-	defer resp.Body.Close()
-
-	rb, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return nerr.Translate(err).Addf("Couldn't read response body")
-	}
-
-	if resp.StatusCode/100 != 2 {
-		return nerr.Create(fmt.Sprintf("Non 200: body %s Response code: %v", rb, resp.StatusCode), "request-error")
-	}
-
-	err = json.Unmarshal(rb, toReturn)
-	if err != nil {
-		return nerr.Translate(err).Addf("Couldn't unmarshal response %s", "unmarshal error")
-	}
-
-	return nil
 }
