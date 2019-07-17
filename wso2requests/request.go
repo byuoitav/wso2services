@@ -72,18 +72,15 @@ func MakeWSO2RequestWithHeaders(method, url string, body interface{}, toReturn i
 			return nerr.Translate(err).Addf("Couldn't read response body")
 		}
 
-		//log.L.Debugf("Response body: %s", rb)
-
-		//log.L.Debugf("Response Headers: %v", resp.Header)
-
 		if resp.StatusCode/100 != 2 {
 			if resp.StatusCode == 400 && len(rb) == 0 && !hasRetried {
 				//if we get a 400 and a blank body and we haven't retried, then just try again
-				log.L.Debugf("400 and blank body - retrying WS02 request")
+				log.L.Debugf("Retrying WSO2 request")
 				hasRetried = true
 				continue
 			}
-			return nerr.Create(fmt.Sprintf("Non 200: body [%s] Response code: [%v]", rb, resp.StatusCode), "request-error")
+
+			return nerr.Create(fmt.Sprintf("response code %v: %s", resp.StatusCode, rb), "request-error")
 		}
 
 		err = json.Unmarshal(rb, toReturn)
