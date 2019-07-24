@@ -18,14 +18,28 @@ func MakeWSO2Request(method, url string, body interface{}, toReturn interface{})
 	return MakeWSO2RequestWithHeaders(method, url, body, toReturn, nil)
 }
 
+//MakeWSO2RequestReturnResponse makes a generic WSO2 request
+//toReturn should be a pointer
+func MakeWSO2RequestReturnResponse(method, url string, body interface{}, toReturn interface{}) (*nerr.E, *http.Response) {
+	err, response := MakeWSO2RequestWithHeadersReturnResponse(method, url, body, toReturn, nil)
+	return err, response
+}
+
 //MakeWSO2RequestWithHeaders makes a generic WSO2 request with headers
 //toReturn should be a pointer
 func MakeWSO2RequestWithHeaders(method, url string, body interface{}, toReturn interface{}, headers map[string]string) *nerr.E {
+	err, _ := MakeWSO2RequestWithHeadersReturnResponse(method, url, body, toReturn, headers)
+	return err
+}
+
+//MakeWSO2RequestWithHeadersReturnResponse makes a generic WSO2 request with headers
+//toReturn should be a pointer
+func MakeWSO2RequestWithHeadersReturnResponse(method, url string, body interface{}, toReturn interface{}, headers map[string]string) (*nerr.E, *http.Response) {
 	//	log.L.Debugf("Making %v request against %v at %v", method, url, time.Now())
 
 	key, er := GetAccessKey()
 	if er != nil {
-		return er.Addf("Couldn't make WSO2 request")
+		return er.Addf("Couldn't make WSO2 request"), nil
 	}
 
 	//attach key
@@ -37,8 +51,9 @@ func MakeWSO2RequestWithHeaders(method, url string, body interface{}, toReturn i
 		if b, ok = body.([]byte); !ok {
 			b, err = json.Marshal(body)
 			if err != nil {
-				return nerr.Translate(err).Addf("Couldn't marhsal request")
+				return nerr.Translate(err).Addf("Couldn't marhsal request"), nil
 			}
+			log.L.Debugf("Sending %s to WSO2", b)
 		}
 	}
 
@@ -47,7 +62,7 @@ func MakeWSO2RequestWithHeaders(method, url string, body interface{}, toReturn i
 
 		req, err := http.NewRequest(method, url, bytes.NewBuffer(b))
 		if err != nil {
-			return nerr.Translate(err).Addf("Couldn't build WSO2 request")
+			return nerr.Translate(err).Addf("Couldn't build WSO2 request"), nil
 		}
 
 		req.Header.Set("Authorization", fmt.Sprintf("Bearer %v", key))
@@ -63,13 +78,13 @@ func MakeWSO2RequestWithHeaders(method, url string, body interface{}, toReturn i
 
 		resp, err := c.Do(req)
 		if err != nil {
-			return nerr.Translate(err).Addf("Couldn't make WSO2 request")
+			return nerr.Translate(err).Addf("Couldn't make WSO2 request"), resp
 		}
 		defer resp.Body.Close()
 
 		rb, err := ioutil.ReadAll(resp.Body)
 		if err != nil {
-			return nerr.Translate(err).Addf("Couldn't read response body")
+			return nerr.Translate(err).Addf("Couldn't read response body"), resp
 		}
 
 		//log.L.Debugf("Response body: %s", rb)
@@ -83,14 +98,14 @@ func MakeWSO2RequestWithHeaders(method, url string, body interface{}, toReturn i
 				hasRetried = true
 				continue
 			}
-			return nerr.Create(fmt.Sprintf("Non 200: body [%s] Response code: [%v]", rb, resp.StatusCode), "request-error")
+			return nerr.Create(fmt.Sprintf("Non 200: body [%s] Response code: [%v]", rb, resp.StatusCode), "request-error"), resp
 		}
 
 		err = json.Unmarshal(rb, toReturn)
 		if err != nil {
-			return nerr.Translate(err).Addf("Couldn't unmarshal response %s", "unmarshal error")
+			return nerr.Translate(err).Addf("Couldn't unmarshal response %s", "unmarshal error"), resp
 		}
 
-		return nil
+		return nil, nil
 	}
 }
