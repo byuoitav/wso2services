@@ -13,17 +13,45 @@ import (
 	"github.com/byuoitav/wso2services/wso2requests"
 )
 
+//ClassScheduleResponseRequest ...
+type ClassScheduleResponseRequest struct {
+	Method        string      `json:"method"`
+	Resource      string      `json:"resource"`
+	Attributes    interface{} `json:"attributes"`
+	Status        int         `json:"status"`
+	StatusMessage string      `json:"statusMessage"`
+}
+
 //ClassScheduleResponse .
 type ClassScheduleResponse struct {
 	ClassRoomService struct {
-		Request struct {
-			Method        string      `json:"method"`
-			Resource      string      `json:"resource"`
-			Attributes    interface{} `json:"attributes"`
-			Status        int         `json:"status"`
-			StatusMessage string      `json:"statusMessage"`
-		} `json:"request"`
-		Room Room `json:"response"`
+		Request ClassScheduleResponseRequest `json:"request"`
+		Room    Room                         `json:"response"`
+	} `json:"ClassRoomService"`
+}
+
+//ClassScheduleBuildingsResponse .
+type ClassScheduleBuildingsResponse struct {
+	ClassRoomService struct {
+		Request           ClassScheduleResponseRequest `json:"request"`
+		BuildingsResponse struct {
+			Buildings []struct {
+				BuildingName string `json:"building_name"`
+			} `json:"buildings"`
+		} `json:"response"`
+	} `json:"ClassRoomService"`
+}
+
+//ClassScheduleRoomListResponse .
+type ClassScheduleRoomListResponse struct {
+	ClassRoomService struct {
+		Request          ClassScheduleResponseRequest `json:"request"`
+		RoomListResponse struct {
+			RoomListItem []struct {
+				RoomNumber      string `json:"room_number"`
+				RoomDescription string `json:"room_desc"`
+			} `json:"roomList"`
+		} `json:"response"`
 	} `json:"ClassRoomService"`
 }
 
@@ -465,4 +493,44 @@ func fetchClassSchedule(roomname, term string) (Room, *nerr.E) {
 	}
 
 	return resp.ClassRoomService.Room, nil
+}
+
+//GetBuildingsWithClassesForYearTerm ...
+func GetBuildingsWithClassesForYearTerm(yearterm string) ([]string, error) {
+	log.L.Debugf("Retrieving buildings with classes for year term %v", yearterm)
+
+	var resp ClassScheduleBuildingsResponse
+
+	err := wso2requests.MakeWSO2Request("GET", fmt.Sprintf("https://api.byu.edu:443/domains/legacy/academic/classschedule/classroom/v1/%v", yearterm), []byte{}, &resp)
+
+	if err != nil {
+		return []string{}, err.Addf("Couldn't fetch buildings for year term")
+	}
+
+	var result []string
+	for _, bldg := range resp.ClassRoomService.BuildingsResponse.Buildings {
+		result = append(result, bldg.BuildingName)
+	}
+
+	return result, nil
+}
+
+//GetRoomWithClassesForYearTermBuilding ...
+func GetRoomWithClassesForYearTermBuilding(yearterm, building string) ([]string, error) {
+	log.L.Debugf("Retrieving rooms with classes for year term %v and building %v", yearterm, building)
+
+	var resp ClassScheduleRoomListResponse
+
+	err := wso2requests.MakeWSO2Request("GET", fmt.Sprintf("https://api.byu.edu:443/domains/legacy/academic/classschedule/classroom/v1/%v/%v", yearterm, building), []byte{}, &resp)
+
+	if err != nil {
+		return []string{}, err.Addf("Couldn't fetch buildings for year term")
+	}
+
+	var result []string
+	for _, room := range resp.ClassRoomService.RoomListResponse.RoomListItem {
+		result = append(result, building+"-"+room.RoomNumber)
+	}
+
+	return result, nil
 }

@@ -93,7 +93,7 @@ var lastAccessedTermIndex int
 
 var classScheduleinterval = time.Duration(24*time.Hour) * -1
 
-func getControlDates() ([]YearTermDate, *nerr.E) {
+func GetControlDates() ([]YearTermDate, *nerr.E) {
 
 	toReturn := []YearTermDate{}
 	resp := ControlDatesWSResponse{}
@@ -117,7 +117,7 @@ func GetYearTermForDate(date time.Time) (YearTermDate, *nerr.E) {
 	classSchedulecheckMutex.Lock()
 	//check to see if last updated is more than interval away
 	if classSchedulelastUpdated.Before(time.Now().Add(classScheduleinterval)) {
-		v, err := getControlDates()
+		v, err := GetControlDates()
 		if err != nil {
 			log.L.Errorf(err.Error())
 			classSchedulecheckMutex.Unlock()
