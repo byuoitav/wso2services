@@ -1,4 +1,4 @@
-package registar
+package registrar
 
 import (
 	"testing"

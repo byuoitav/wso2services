@@ -93,6 +93,7 @@ var lastAccessedTermIndex int
 
 var classScheduleinterval = time.Duration(24*time.Hour) * -1
 
+//GetControlDates .
 func GetControlDates() ([]YearTermDate, *nerr.E) {
 
 	toReturn := []YearTermDate{}

@@ -1,4 +1,4 @@
-package registar
+package registrar
 
 import (
 	"fmt"
@@ -59,19 +59,19 @@ type ClassScheduleRoomListResponse struct {
 type ClassSchedule struct {
 	DeptName       string      `json:"dept_name"`
 	CatalogNumber  string      `json:"catalog_number"`
-	CatalogSuffix  interface{} `json:"catalog_suffix"`
-	LabQuizSection interface{} `json:"lab_quiz_section"`
-	Honors         interface{} `json:"honors"`
-	ServLearning   interface{} `json:"serv_learning"`
+	CatalogSuffix  string      `json:"catalog_suffix"`
+	LabQuizSection string      `json:"lab_quiz_section"`
+	Honors         string      `json:"honors"`
+	ServLearning   string      `json:"serv_learning"`
 	CreditHours    float64     `json:"credit_hours"`
-	SectionType    interface{} `json:"section_type"`
+	SectionType    string      `json:"section_type"`
 	ClassTime      string      `json:"class_time"`
 	Days           string      `json:"days"`
 	InstructorName string      `json:"instructor_name"`
 	SectionSize    int         `json:"section_size"`
 	TotalEnr       int         `json:"total_enr"`
 	SchedType      string      `json:"sched_type"`
-	AssignTo       interface{} `json:"assign_to"`
+	AssignTo       string      `json:"assign_to"`
 	StartDate      interface{} `json:"start_date"`
 	EndDate        interface{} `json:"end_date"`
 
@@ -521,10 +521,13 @@ func GetRoomWithClassesForYearTermBuilding(yearterm, building string) ([]string,
 
 	var resp ClassScheduleRoomListResponse
 
-	err := wso2requests.MakeWSO2Request("GET", fmt.Sprintf("https://api.byu.edu:443/domains/legacy/academic/classschedule/classroom/v1/%v/%v", yearterm, building), []byte{}, &resp)
+	url := fmt.Sprintf("https://api.byu.edu:443/domains/legacy/academic/classschedule/classroom/v1/%v/%v", yearterm, building)
+	log.L.Debugf("URL for GetRoomWithClassesForYearTermBuilding [%v]", url)
+
+	err := wso2requests.MakeWSO2Request("GET", url, []byte{}, &resp)
 
 	if err != nil {
-		return []string{}, err.Addf("Couldn't fetch buildings for year term")
+		return []string{}, err.Addf("Couldn't fetch rooms for building")
 	}
 
 	var result []string
@@ -533,4 +536,21 @@ func GetRoomWithClassesForYearTermBuilding(yearterm, building string) ([]string,
 	}
 
 	return result, nil
+}
+
+//GetClassSchedulesForYearTermBuildingRoom ...
+func GetClassSchedulesForYearTermBuildingRoom(yearterm, building, roomNumber string) (Room, error) {
+
+	log.L.Debugf("Retrieving class schedules for room %v for year term %v and building %v", roomNumber, yearterm, building)
+
+	var resp ClassScheduleResponse
+
+	err := wso2requests.MakeWSO2Request("GET", fmt.Sprintf("https://api.byu.edu:443/domains/legacy/academic/classschedule/classroom/v1/%v/%v/%v/Schedule", yearterm, building, roomNumber), []byte{}, &resp)
+
+	if err != nil {
+		return Room{}, err.Addf("Couldn't fetch classes for room")
+	}
+
+	return resp.ClassRoomService.Room, nil
+
 }
