@@ -14,11 +14,11 @@ import (
 //cache by yearterm -> room
 
 var classScheduleCache map[string]map[string][]ClassSchedule
-var updateTimesByBuilding map[string]time.Time
+var updateTimesByRoom map[string]time.Time
 var ttl = (24 * time.Hour) * -1
 
 func init() {
-	updateTimesByBuilding = map[string]time.Time{}
+	updateTimesByRoom = map[string]time.Time{}
 	classScheduleCache = map[string]map[string][]ClassSchedule{}
 }
 
@@ -68,6 +68,11 @@ func GetSimpleClassSchedulesForRoomEnrollmentPeriod(roomname, enrollmentPeriod s
 
 		//now go through each assigned schedule and translate to dates / times
 		for _, assignedSchedule := range oneSchedule.AssignedSchedules.Values {
+			if assignedSchedule.Building.Value+"-"+assignedSchedule.Room.Value != roomname {
+				//this API is weird and sometimes returns other rooms co-scheduled or something
+				continue
+			}
+
 			startDate, err := time.Parse("2006-01-02", assignedSchedule.StartDate.Value)
 			if err != nil {
 				log.L.Errorf("Invalid start date when parsing schedule %v", assignedSchedule.StartDate.Value)
@@ -141,7 +146,7 @@ func GetClassSchedulesForRoomEnrollmentPeriod(roomname, enrollmentPeriod string)
 
 	//check to see if we have the class schedule cached for that term
 	if termmap, ok := classScheduleCache[enrollmentPeriod]; ok {
-		if time.Now().Add(ttl).Before(updateTimesByBuilding[rmsplit[0]]) {
+		if time.Now().Add(ttl).Before(updateTimesByRoom[roomname]) {
 			//check for the cache
 			if cachedSchedules, ok := termmap[roomname]; ok {
 				//check to see if it's up to date
@@ -181,13 +186,27 @@ func GetClassSchedulesForRoomEnrollmentPeriod(roomname, enrollmentPeriod string)
 		}
 	}
 
-	updateTimesByBuilding[rmsplit[0]] = time.Now()
+	updateTimesByRoom[roomname] = time.Now()
 
 	m := classScheduleCache[enrollmentPeriod]
 
 	for i := range classes {
+		var validAssignedSchedules []AssignedScheduleValue
+
+		//cull out the ones that don't match the building/room
+		for _, oneAssignedSchedule := range classes[i].AssignedSchedules.Values {
+			if oneAssignedSchedule.Building.Value+"-"+oneAssignedSchedule.Room.Value == roomname {
+				validAssignedSchedules = append(validAssignedSchedules, oneAssignedSchedule)
+			}
+		}
+
+		classes[i].AssignedSchedules.Values = validAssignedSchedules
+
 		//we go through and update the map
 		rmname := fmt.Sprintf("%v-%v", classes[i].AssignedSchedules.Values[0].Building.Value, classes[i].AssignedSchedules.Values[0].Room.Value)
+		if rmname != roomname {
+			log.L.Fatalf("MISMATCH %v %v", rmname, roomname)
+		}
 
 		m[rmname] = append(m[rmname], classes[i])
 	}

@@ -88,9 +88,9 @@ type BoolValueStruct struct {
 	Domain          string `json:"domain"`
 }
 
-// AssignedSchedule .
-type AssignedSchedule struct {
-	Values []struct {
+// AssignedScheduleValue .
+type AssignedScheduleValue struct {
+	
 		EnrollmentPeriod StringValueStruct `json:"enrollment_period"`
 		TeachingArea     StringValueStruct `json:"teaching_area"`
 		CourseNumber     StringValueStruct `json:"course_number"`
@@ -118,6 +118,12 @@ type AssignedSchedule struct {
 		DateTimeUpdated     StringValueStruct `json:"updated_datetime"`
 		UpdatedByBYUID      StringValueStruct `json:"updated_by_byu_id"`
 		AllowConflict       BoolValueStruct   `json:"allow_conflict"`
-		RoomCapacity        IntValueStruct
-	} `json:"values"`
+		RoomCapacity        IntValueStruct `json:"room_capacity"`
+
+}
+
+
+// AssignedSchedule .
+type AssignedSchedule struct {
+	Values []AssignedScheduleValue `json:"values"`
 }
