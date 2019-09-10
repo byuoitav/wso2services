@@ -39,8 +39,37 @@ func GetSimpleClassSchedulesForRoomAndTime(roomname string, classtime time.Time)
 	var toReturn []SimpleClassSchedule
 
 	for _, oneSchedule := range termClassSchedules {
-		if (oneSchedule.StartDateTime.Before(classtime) || oneSchedule.StartDateTime.Equal(classtime)) &&
+		if (oneSchedule.StartDateTime.Before(classtime) || oneSchedule.EndDateTime.Equal(classtime)) &&
 			(oneSchedule.EndDateTime.After(classtime) || oneSchedule.EndDateTime.Equal(classtime)) {
+			toReturn = append(toReturn, oneSchedule)
+		}
+	}
+
+	return toReturn, nil
+}
+
+//GetSimpleClassSchedulesForRoomAndDate - will use the local cache if it has been looked up before
+func GetSimpleClassSchedulesForRoomAndDate(roomname string, classtime time.Time) ([]SimpleClassSchedule, *nerr.E) {
+	t, err := calendar.GetYearTermForDate(classtime)
+
+	if err != nil {
+		return []SimpleClassSchedule{}, err.Addf("Couldn't get year erm for room %v and time %v", roomname, classtime)
+	}
+
+	termClassSchedules, err := GetSimpleClassSchedulesForRoomEnrollmentPeriod(roomname, strings.Replace(t.YearTermDesc, " ", "", -1))
+
+	if err != nil {
+		return []SimpleClassSchedule{}, err.Addf("Couldn't get simple class schedule for room %v and time %v", roomname, classtime)
+	}
+
+	var toReturn []SimpleClassSchedule
+
+	startOfClassDay := time.Date(classtime.Year(), classtime.Month(), classtime.Day(), 0, 0, 0, 0, classtime.Location())
+	endOfClassDay := startOfClassDay.Add(time.Hour*24 - time.Nanosecond)
+
+	for _, oneSchedule := range termClassSchedules {
+		if (oneSchedule.StartDateTime.After(startOfClassDay) && oneSchedule.StartDateTime.Before(endOfClassDay)) ||
+			(oneSchedule.EndDateTime.After(startOfClassDay) && oneSchedule.EndDateTime.Before(endOfClassDay)) {
 			toReturn = append(toReturn, oneSchedule)
 		}
 	}

@@ -95,7 +95,7 @@ type Room struct {
 }
 
 const (
-	registarRecordTTL = -24 * time.Hour // once a day
+	registrarRecordTTL = -24 * time.Hour // once a day
 )
 
 func init() {
