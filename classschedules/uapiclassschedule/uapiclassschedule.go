@@ -3,6 +3,7 @@ package uapiclassschedule
 import (
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/byuoitav/common/log"
@@ -11,15 +12,21 @@ import (
 	"github.com/byuoitav/wso2services/wso2requests"
 )
 
-//cache by yearterm -> room
+//ClassScheduleCacheItem - cache key will be yearterm-roomid
+type ClassScheduleCacheItem struct {
+	Schedules      []ClassSchedule
+	LastUpdateTime time.Time
+	Mutex          *sync.Mutex
+}
 
-var classScheduleCache map[string]map[string][]ClassSchedule
-var updateTimesByRoom map[string]time.Time
+var classScheduleCache map[string]ClassScheduleCacheItem
+var cacheMutex *sync.Mutex
+
 var ttl = (24 * time.Hour) * -1
 
 func init() {
-	updateTimesByRoom = map[string]time.Time{}
-	classScheduleCache = map[string]map[string][]ClassSchedule{}
+	classScheduleCache = make(map[string]ClassScheduleCacheItem)
+	cacheMutex = &sync.Mutex{}
 }
 
 //GetSimpleClassSchedulesForRoomAndTime - will use the local cache if it has been looked up before
@@ -172,20 +179,33 @@ func GetSimpleClassSchedulesForRoomEnrollmentPeriod(roomname, enrollmentPeriod s
 //GetClassSchedulesForRoomEnrollmentPeriod - will use the local cache if it has been looked up before
 func GetClassSchedulesForRoomEnrollmentPeriod(roomname, enrollmentPeriod string) ([]ClassSchedule, *nerr.E) {
 	rmsplit := strings.Split(roomname, "-")
-
+	cacheKey := enrollmentPeriod + "-" + roomname
 	//check to see if we have the class schedule cached for that term
-	if termmap, ok := classScheduleCache[enrollmentPeriod]; ok {
-		if time.Now().Add(ttl).Before(updateTimesByRoom[roomname]) {
+	cacheMutex.Lock()
+	defer cacheMutex.Unlock()
+	cache, ok := classScheduleCache[cacheKey]
+
+	if ok {
+		if time.Now().Add(ttl).Before(cache.LastUpdateTime) {
 			//check for the cache
-			if cachedSchedules, ok := termmap[roomname]; ok {
+			//get the lock on the room map
+			cache.Mutex.Lock()
+			cachedSchedules := cache.Schedules
+			cache.Mutex.Unlock()
+
+			if ok {
 				//check to see if it's up to date
 				return cachedSchedules, nil
 			}
 			return []ClassSchedule{}, nerr.Create(fmt.Sprintf("Cannot get schedule for room %v, even after fetch", roomname), "invalid-room")
 		}
 	} else {
-		//nothing for this term, we need to initialze the map
-		classScheduleCache[enrollmentPeriod] = map[string][]ClassSchedule{}
+		//nothing for this term, we need to initialze the cache item
+		log.L.Debugf("No cache - creating new cache item")
+		cache = ClassScheduleCacheItem{
+			Schedules: []ClassSchedule{},
+			Mutex:     &sync.Mutex{},
+		}
 	}
 
 	var classes []ClassSchedule
@@ -215,10 +235,10 @@ func GetClassSchedulesForRoomEnrollmentPeriod(roomname, enrollmentPeriod string)
 		}
 	}
 
-	updateTimesByRoom[roomname] = time.Now()
+	//lock and update our caches
+	log.L.Debugf("Got %v classes for %v-%v", len(classes), roomname, enrollmentPeriod)
 
-	m := classScheduleCache[enrollmentPeriod]
-
+	cache.Mutex.Lock()
 	for i := range classes {
 		var validAssignedSchedules []AssignedScheduleValue
 
@@ -231,19 +251,12 @@ func GetClassSchedulesForRoomEnrollmentPeriod(roomname, enrollmentPeriod string)
 
 		classes[i].AssignedSchedules.Values = validAssignedSchedules
 
-		//we go through and update the map
-		rmname := fmt.Sprintf("%v-%v", classes[i].AssignedSchedules.Values[0].Building.Value, classes[i].AssignedSchedules.Values[0].Room.Value)
-		if rmname != roomname {
-			log.L.Fatalf("MISMATCH %v %v", rmname, roomname)
-		}
-
-		m[rmname] = append(m[rmname], classes[i])
+		cache.Schedules = append(cache.Schedules, classes[i])
 	}
-	classScheduleCache[enrollmentPeriod] = m
+	cache.LastUpdateTime = time.Now()
+	cache.Mutex.Unlock()
 
-	if v, ok := classScheduleCache[enrollmentPeriod][roomname]; ok {
-		return v, nil
-	}
+	classScheduleCache[enrollmentPeriod+"-"+roomname] = cache
 
-	return []ClassSchedule{}, nerr.Create(fmt.Sprintf("Cannot get schedule for room %v, even after fetch", roomname), "invalid-room")
+	return cache.Schedules, nil
 }
