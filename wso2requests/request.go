@@ -76,11 +76,7 @@ func MakeWSO2RequestWithHeadersReturnResponse(method, url string, body interface
 			Timeout: 20 * time.Second, //I wish we could make this shorter... but alas.
 		}
 
-		resp, err := c.Do(req)
-		if err.Timeout() {
-			return nerr.Translate(err).Addf("request timed out or was cancelled"), resp, ""
-		}
-		
+		resp, err := c.Do(req)		
 		if err != nil {
 			return nerr.Translate(err).Addf("Couldn't make WSO2 request"), resp, ""
 		}
