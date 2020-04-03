@@ -5,7 +5,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
+	"net"
 	"net/http"
+	"net/url"
 	"time"
 
 	"github.com/byuoitav/common/log"
@@ -34,7 +36,7 @@ func MakeWSO2RequestWithHeaders(method, url string, body interface{}, toReturn i
 
 //MakeWSO2RequestWithHeadersReturnResponse makes a generic WSO2 request with headers - returns err, http response, and response body
 //toReturn should be a pointer
-func MakeWSO2RequestWithHeadersReturnResponse(method, url string, body interface{}, toReturn interface{}, headers map[string]string) (*nerr.E, *http.Response, string) {
+func MakeWSO2RequestWithHeadersReturnResponse(method, requestUrl string, body interface{}, toReturn interface{}, headers map[string]string) (*nerr.E, *http.Response, string) {
 	//	log.L.Debugf("Making %v request against %v at %v", method, url, time.Now())
 
 	key, er := GetAccessKey()
@@ -60,7 +62,7 @@ func MakeWSO2RequestWithHeadersReturnResponse(method, url string, body interface
 	for {
 		hasRetried := false
 
-		req, err := http.NewRequest(method, url, bytes.NewBuffer(b))
+		req, err := http.NewRequest(method, requestUrl, bytes.NewBuffer(b))
 		if err != nil {
 			return nerr.Translate(err).Addf("Couldn't build WSO2 request"), nil, ""
 		}
@@ -87,11 +89,11 @@ func MakeWSO2RequestWithHeadersReturnResponse(method, url string, body interface
 				return nerr.Translate(err).Addf("request timed out or was cancelled"), resp, ""
 			}
 		}
-		
+
 		if err != nil {
 			return nerr.Translate(err).Addf("Couldn't make WSO2 request"), resp, ""
 		}
-		
+
 		defer resp.Body.Close()
 
 		rb, err := ioutil.ReadAll(resp.Body)
