@@ -14,28 +14,28 @@ import (
 	"github.com/byuoitav/common/nerr"
 )
 
-//MakeWSO2Request makes a generic WSO2 request
-//toReturn should be a pointer
+// MakeWSO2Request makes a generic WSO2 request
+// toReturn should be a pointer
 func MakeWSO2Request(method, url string, body interface{}, toReturn interface{}) *nerr.E {
 	return MakeWSO2RequestWithHeaders(method, url, body, toReturn, nil)
 }
 
-//MakeWSO2RequestReturnResponse makes a generic WSO2 request - returns err, http response, and response body
-//toReturn should be a pointer
+// MakeWSO2RequestReturnResponse makes a generic WSO2 request - returns err, http response, and response body
+// toReturn should be a pointer
 func MakeWSO2RequestReturnResponse(method, url string, body interface{}, toReturn interface{}) (*nerr.E, *http.Response, string) {
 	err, response, responseBody := MakeWSO2RequestWithHeadersReturnResponse(method, url, body, toReturn, nil)
 	return err, response, responseBody
 }
 
-//MakeWSO2RequestWithHeaders makes a generic WSO2 request with headers
-//toReturn should be a pointer
+// MakeWSO2RequestWithHeaders makes a generic WSO2 request with headers
+// toReturn should be a pointer
 func MakeWSO2RequestWithHeaders(method, url string, body interface{}, toReturn interface{}, headers map[string]string) *nerr.E {
 	err, _, _ := MakeWSO2RequestWithHeadersReturnResponse(method, url, body, toReturn, headers)
 	return err
 }
 
-//MakeWSO2RequestWithHeadersReturnResponse makes a generic WSO2 request with headers - returns err, http response, and response body
-//toReturn should be a pointer
+// MakeWSO2RequestWithHeadersReturnResponse makes a generic WSO2 request with headers - returns err, http response, and response body
+// toReturn should be a pointer
 func MakeWSO2RequestWithHeadersReturnResponse(method, requestUrl string, body interface{}, toReturn interface{}, headers map[string]string) (*nerr.E, *http.Response, string) {
 	//	log.L.Debugf("Making %v request against %v at %v", method, url, time.Now())
 
@@ -48,6 +48,7 @@ func MakeWSO2RequestWithHeadersReturnResponse(method, requestUrl string, body in
 	var b []byte
 	var ok bool
 	var err error
+	hasRetried := false
 
 	if body != nil {
 		if b, ok = body.([]byte); !ok {
@@ -60,8 +61,6 @@ func MakeWSO2RequestWithHeadersReturnResponse(method, requestUrl string, body in
 	}
 
 	for {
-		hasRetried := false
-
 		req, err := http.NewRequest(method, requestUrl, bytes.NewBuffer(b))
 		if err != nil {
 			return nerr.Translate(err).Addf("Couldn't build WSO2 request"), nil, ""
