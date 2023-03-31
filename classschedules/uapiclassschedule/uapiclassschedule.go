@@ -12,7 +12,7 @@ import (
 	"github.com/byuoitav/wso2services/wso2requests"
 )
 
-//ClassScheduleCacheItem - cache key will be yearterm-roomid
+// ClassScheduleCacheItem - cache key will be yearterm-roomid
 type ClassScheduleCacheItem struct {
 	Schedules      []ClassSchedule
 	LastUpdateTime time.Time
@@ -29,7 +29,7 @@ func init() {
 	cacheMutex = &sync.Mutex{}
 }
 
-//GetSimpleClassSchedulesForRoomAndTime - will use the local cache if it has been looked up before
+// GetSimpleClassSchedulesForRoomAndTime - will use the local cache if it has been looked up before
 func GetSimpleClassSchedulesForRoomAndTime(roomname string, classtime time.Time) ([]SimpleClassSchedule, *nerr.E) {
 	t, err := calendar.GetYearTermForDate(classtime)
 
@@ -55,7 +55,7 @@ func GetSimpleClassSchedulesForRoomAndTime(roomname string, classtime time.Time)
 	return toReturn, nil
 }
 
-//GetSimpleClassSchedulesForRoomAndDate - will use the local cache if it has been looked up before
+// GetSimpleClassSchedulesForRoomAndDate - will use the local cache if it has been looked up before
 func GetSimpleClassSchedulesForRoomAndDate(roomname string, classtime time.Time) ([]SimpleClassSchedule, *nerr.E) {
 	t, err := calendar.GetYearTermForDate(classtime)
 
@@ -84,7 +84,7 @@ func GetSimpleClassSchedulesForRoomAndDate(roomname string, classtime time.Time)
 	return toReturn, nil
 }
 
-//GetSimpleClassSchedulesForRoomEnrollmentPeriod does the translation
+// GetSimpleClassSchedulesForRoomEnrollmentPeriod does the translation
 func GetSimpleClassSchedulesForRoomEnrollmentPeriod(roomname, enrollmentPeriod string) ([]SimpleClassSchedule, *nerr.E) {
 	RawClassScheduleList, err := GetClassSchedulesForRoomEnrollmentPeriod(roomname, enrollmentPeriod)
 
@@ -176,9 +176,15 @@ func GetSimpleClassSchedulesForRoomEnrollmentPeriod(roomname, enrollmentPeriod s
 	return toReturn, nil
 }
 
-//GetClassSchedulesForRoomEnrollmentPeriod - will use the local cache if it has been looked up before
+// GetClassSchedulesForRoomEnrollmentPeriod - will use the local cache if it has been looked up before
 func GetClassSchedulesForRoomEnrollmentPeriod(roomname, enrollmentPeriod string) ([]ClassSchedule, *nerr.E) {
 	rmsplit := strings.Split(roomname, "-")
+	building := rmsplit[0]
+	// We have rooms that have multiple systems in a room.  Each one was designated with an X and then a letter for the system.
+	// ie ITB-1101XA-CP1 then ITB-1101XB-CP1 etc.....  They all exist in the same room.
+	// This is what was causing lots of 400s, I think
+	roomDevice := strings.Split(rmsplit[1], "X")
+	room := roomDevice[0]
 	cacheKey := enrollmentPeriod + "-" + roomname
 	//check to see if we have the class schedule cached for that term
 	cacheMutex.Lock()
@@ -212,7 +218,7 @@ func GetClassSchedulesForRoomEnrollmentPeriod(roomname, enrollmentPeriod string)
 
 	var resp ClassResponse
 
-	err := wso2requests.MakeWSO2Request("GET", fmt.Sprintf("https://api.byu.edu/byuapi/classes/v2/?subset_size=100&enrollment_periods=%v&building=%v&room=%v&contexts=class_schedule", enrollmentPeriod, rmsplit[0], rmsplit[1]), []byte{}, &resp)
+	err := wso2requests.MakeWSO2Request("GET", fmt.Sprintf("https://api.byu.edu/byuapi/classes/v2/?subset_size=100&enrollment_periods=%v&building=%v&room=%v&contexts=class_schedule", enrollmentPeriod, building, room), []byte{}, &resp)
 
 	if err != nil {
 		return classes, err.Addf("Couldn't fetch class scheudle")
@@ -224,7 +230,7 @@ func GetClassSchedulesForRoomEnrollmentPeriod(roomname, enrollmentPeriod string)
 
 	for resp.Metadata.PageStart+resp.Metadata.SubsetSize < resp.Metadata.CollectionSize {
 
-		err := wso2requests.MakeWSO2Request("GET", fmt.Sprintf("https://api.byu.edu/byuapi/classes/v2/?subset_size=100&enrollment_periods=%v&building=%v&room=%v&contexts=class_schedule&subset_start_offset=%v", enrollmentPeriod, rmsplit[0], rmsplit[1], resp.Metadata.PageStart+resp.Metadata.SubsetSize+1), []byte{}, &resp)
+		err := wso2requests.MakeWSO2Request("GET", fmt.Sprintf("https://api.byu.edu/byuapi/classes/v2/?subset_size=100&enrollment_periods=%v&building=%v&room=%v&contexts=class_schedule&subset_start_offset=%v", enrollmentPeriod, building, room, resp.Metadata.PageStart+resp.Metadata.SubsetSize+1), []byte{}, &resp)
 
 		if err != nil {
 			return classes, err.Addf("Couldn't fetch class scheudle")

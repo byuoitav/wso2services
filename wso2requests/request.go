@@ -37,7 +37,7 @@ func MakeWSO2RequestWithHeaders(method, url string, body interface{}, toReturn i
 // MakeWSO2RequestWithHeadersReturnResponse makes a generic WSO2 request with headers - returns err, http response, and response body
 // toReturn should be a pointer
 func MakeWSO2RequestWithHeadersReturnResponse(method, requestUrl string, body interface{}, toReturn interface{}, headers map[string]string) (*nerr.E, *http.Response, string) {
-	//	log.L.Debugf("Making %v request against %v at %v", method, url, time.Now())
+	log.L.Debugf("Making %v request against %v at %v", method, requestUrl, time.Now())
 
 	key, er := GetAccessKey()
 	if er != nil {
